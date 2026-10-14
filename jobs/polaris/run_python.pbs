@@ -1,0 +1,24 @@
+#!/bin/bash -l
+#PBS -A YOUR_PROJECT
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l place=scatter
+#PBS -l filesystems=home:eagle
+#PBS -l walltime=01:00:00
+#PBS -N blastnet-python
+#PBS -j oe
+# Run "$CMD" (via bash -c, after env.sh, in the repo root) on one node with all 4 GPUs visible;
+# e.g. evaluating your own runs:
+#   qsub -v "CMD=python -m blastnet.cli eval \$BLASTNET_RUNS/RUN/MODEL.pt --root \$BLASTNET_DATA --out \$BLASTNET_RUNS/eval/rows.jsonl --device cuda" \
+#        jobs/polaris/run_python.pbs
+# CMD cannot contain commas (qsub -v splits on them): put such commands in a script and pass
+# CMD="bash path/to/script.sh". Escape $ so variables expand on the compute node, after env.sh.
+# Over 1 h: add -q preemptable -l walltime=HH:MM:SS on the qsub line.
+
+_repo=${PBS_O_WORKDIR:-$PWD}  # submit from the repository root
+source "$_repo/jobs/polaris/common.sh"
+set -eo pipefail
+
+: "${CMD:?set CMD via qsub -v CMD=...}"
+blastnet_info "run: $CMD"
+bash -c "$CMD" 2>&1 | tee -a "$BLASTNET_RUNS/logs/run_python.$JOBID.log"

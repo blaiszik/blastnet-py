@@ -1,0 +1,35 @@
+#!/bin/bash -l
+#PBS -A YOUR_PROJECT
+#PBS -q preemptable
+#PBS -l select=1:system=polaris
+#PBS -l place=scatter
+#PBS -l filesystems=home:eagle
+#PBS -l walltime=01:30:00
+#PBS -N blastnet-train
+#PBS -j oe
+# Train one SR net on one node, 4 GPUs, DDP (Lightning launches the 3 extra ranks itself).
+#   qsub -l walltime=01:30:00 \
+#        -v NAME=edsr,SIZE=0.8M,AUG=aug,LOSS=mse,SEED=0,HOURS=1.5 jobs/polaris/train.pbs
+# NAME edsr|rcan|rrdb|gconv  SIZE upstream label  AUG aug|noaug  LOSS mse|mse_grad  SEED int
+# HOURS = the job's walltime in hours (keep -l walltime equal to it); optional RATIO (default 8)
+# and EXTRA (extra `blastnet train` flags, no commas). The run stops itself at HOURS - 10 min
+# (max_time), writing last.ckpt and the shipped-style .pt; resubmitting the same line resumes.
+# Run dir: $BLASTNET_RUNS/$NAME-$SIZE-r$RATIO-$LOSS-$AUG-s$SEED
+
+_repo=${PBS_O_WORKDIR:-$PWD}  # submit from the repository root
+source "$_repo/jobs/polaris/common.sh"
+set -eo pipefail
+
+: "${NAME:?NAME}" "${SIZE:?SIZE}" "${AUG:?AUG}" "${LOSS:?LOSS}" "${SEED:?SEED}" "${HOURS:?HOURS}"
+RATIO=${RATIO:-8}
+STEM=$NAME-$SIZE-r$RATIO-$LOSS-$AUG-s$SEED
+RUN=$BLASTNET_RUNS/$STEM
+mkdir -p "$RUN"
+MAX_TIME=$(awk -v h="$HOURS" 'BEGIN { t = int(h * 3600) - 600; if (t < 300) t = 300; print t }')
+blastnet_info "train $STEM max_time=${MAX_TIME}s"
+
+# shellcheck disable=SC2086  # EXTRA is a list of flags
+python -m blastnet.cli train --root "$BLASTNET_DATA" --out "$BLASTNET_RUNS" \
+  --name "$NAME" --size "$SIZE" --ratio "$RATIO" --loss "$LOSS" --aug "$AUG" --seed "$SEED" \
+  --accelerator gpu --devices 4 --strategy ddp --precision 16-mixed --num-workers 6 \
+  --max-time "$MAX_TIME" ${EXTRA:-} 2>&1 | tee -a "$RUN/train.$JOBID.log"

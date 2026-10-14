@@ -1,0 +1,43 @@
+#!/bin/bash -l
+#PBS -A YOUR_PROJECT
+#PBS -q preemptable
+#PBS -l select=1:system=polaris
+#PBS -l place=scatter
+#PBS -l filesystems=home:eagle
+#PBS -l walltime=04:00:00
+#PBS -N blastnet-eval-shipped
+#PBS -j oe
+# Evaluate every shipped checkpoint ($BLASTNET_DATA/best_model_weights/seed*/, 120 files) on the
+# test, forcedhit and paramvar splits with the upstream metrics: 4 processes on one node, one GPU
+# each, files sorted by cost and dealt round-robin (shard i takes files[i::4]).
+#   qsub jobs/polaris/eval_shipped.pbs
+#   qsub -v FAMILIES="edsr rcan",SEEDS=42,SPLITS=test,OUT=/path jobs/polaris/eval_shipped.pbs
+# One JSON row per (file, split) in $OUT/shipped.shard<i>.jsonl; rows already present are skipped,
+# so resubmitting after preemption or walltime continues. Ends with $OUT/leaderboard.md.
+
+_repo=${PBS_O_WORKDIR:-$PWD}  # submit from the repository root
+source "$_repo/jobs/polaris/common.sh"
+set -eo pipefail
+
+OUT=${OUT:-$BLASTNET_RUNS/eval_shipped}
+SPLITS=${SPLITS:-test forcedhit paramvar}
+NSHARDS=4
+mkdir -p "$OUT"
+args=(--splits $SPLITS)
+if [ -n "${FAMILIES:-}" ]; then args+=(--families $FAMILIES); fi
+if [ -n "${SEEDS:-}" ]; then args+=(--seeds $SEEDS); fi
+blastnet_info "eval-shipped -> $OUT (${args[*]})"
+
+pids=()
+for i in $(seq 0 $((NSHARDS - 1))); do
+  CUDA_VISIBLE_DEVICES=$i python -m blastnet.cli eval-shipped --root "$BLASTNET_DATA" \
+    --out "$OUT/shipped.shard$i.jsonl" --shard "$i" --num-shards "$NSHARDS" \
+    --device cuda --num-workers 4 "${args[@]}" > "$OUT/shard$i.$JOBID.log" 2>&1 &
+  pids+=($!)
+done
+fail=0
+for pid in "${pids[@]}"; do wait "$pid" || fail=1; done
+python -m blastnet.cli leaderboard "$OUT"/shipped.shard*.jsonl --out "$OUT/leaderboard.md" \
+  > /dev/null
+blastnet_info "eval-shipped done (fail=$fail)"
+exit $fail

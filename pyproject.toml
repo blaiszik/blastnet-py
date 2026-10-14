@@ -1,0 +1,63 @@
+[project]
+name = "blastnet"
+version = "0.0.1"
+description = "PyTorch data layer, physics metrics, and super-resolution baselines for BLASTNet Momentum128."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Ben Blaiszik", email = "blaiszik@uchicago.edu" }]
+keywords = ["BLASTNet", "turbulence", "combustion", "super-resolution", "pytorch", "equivariance"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "torch>=2.4",
+  "numpy",
+  "pandas",
+  "zarr>=3",
+  "lightning>=2.4",
+]
+
+[project.optional-dependencies]
+kaggle = ["kagglehub"]
+viz = ["matplotlib>=3.8"]
+
+[project.urls]
+Repository = "https://github.com/blaiszik/blastnet-py"
+Dataset = "https://www.kaggle.com/datasets/waitongchung/blastnet-momentum-3d-sr-dataset"
+"Upstream benchmark" = "https://github.com/blastnet/blastnet2_sr_benchmark"
+
+[project.scripts]
+blastnet = "blastnet.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "matplotlib",
+    "scipy>=1.18.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/blastnet"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E741", "RUF001", "RUF012", "B905"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
